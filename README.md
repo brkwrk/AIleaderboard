@@ -1,0 +1,2 @@
+# AImidterm
+midterm for AI
