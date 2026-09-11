@@ -1,0 +1,24 @@
+{% extends "base.html.jinja" %}
+{% block title %}View / Create Leaderboard{% endblock title %}
+{% block body %}
+<div class="box">
+  <span>Current Leaderboards</span>
+  <br>
+  <ul>
+    {% for uuid, leaderboard in leaderboards.items() %}
+    <li><a href="/leaderboard/{{ uuid }}"><button>{{ leaderboard.title|escape }} ({{ leaderboard.teams|length }} teams)</button></a></li>
+    {% else %}
+    <p>There are no leaderboards currently. Create one below.</p>
+    {% endfor %}
+  </ul>
+</div>
+<div class="box">
+  <b>Create a New Leaderboard</b>
+  <form name="create_leaderboard" method="post">
+    <label for="leaderboard_title">Title</label>
+    <input id="leaderboard_title" name="title" size="30" maxlength="30" required="true">
+    <br>
+    <input type="submit" id="create_leaderboard_submit_button" name="create_leaderboard_submit_button" value="Create">
+  </form>
+</div>
+{% endblock body %}

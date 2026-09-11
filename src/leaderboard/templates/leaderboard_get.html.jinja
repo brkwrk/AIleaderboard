@@ -1,0 +1,69 @@
+{% extends "base.html.jinja" %}
+{% block title %}{{ leaderboard.title | escape }}{% endblock title %}
+{% block body %}
+<div class="box">
+  {% if leaderboard.teams|length != 0 %}
+  <table>
+    <caption>Current Teams</caption>
+    <thead>
+      <tr>
+        {% for header_element in (('Place', 'Team Name') if leaderboard.state == 0 else ('Place', 'Team Name', 'Time')) %}
+        <th>{{ header_element }}</th>
+        {% endfor %}
+      </tr>
+    </thead>
+    <tbody>
+      {% for team in leaderboard.teams %}
+      <tr>
+        <td>{{ loop.index }}</td>
+        <td>{{ team.title|escape }}</td>
+        {% if leaderboard.state != 0 %}
+        <td>
+          {% if team.complete %}
+          {{ get_elapsed(team.end_time - leaderboard.start_time) }}
+          {% elif leaderboard.state == 2 %}
+          Did not finish
+          {% else %}
+          <form name="team_{{ team.id_ }}" method="post">
+            <input type="hidden" id="team_stop" name="team_stop" value="{{ team.id_ }}">
+            <input type="submit" id="submit_{{ team.id_ }}" name="submit_{{ team.id_ }}" value="Stop">
+          </form>
+          {% endif %}
+        </td>
+        {% endif %}
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+  {% else %}
+  <div style="text-align:center">Current Teams</div>
+  <p>There are no teams currently. Create one below.</p>
+  {% endif %}
+</div>
+{% if leaderboard.state == 0 %}
+<div class="box">
+  <b>Create a New Team</b>
+  <form name="create_team" method="post">
+    <label for="team_title">Title</label>
+    <input id="team_title" name="team_title" size="30" maxlength="30" required="true">
+    <br>
+    <input type="submit" id="create_team_submit_button" name="create_team_submit_button" value="Create">
+  </form>
+</div>
+{% endif %}
+{% if leaderboard.state == 0 and leaderboard.teams %}
+<form name="start_timer" method="post">
+  <input type="hidden" id="start_leaderboard_timer" name="start_leaderboard_timer" value="true">
+  <br>
+  <input type="submit" id="start_timer_submit_button" name="start_timer_submit_button" value="Start Timer">
+</form>
+{% elif leaderboard.state == 1 %}
+<form name="stop_timer" method="post">
+  <input type="hidden" id="stop_leaderboard_timer" name="stop_leaderboard_timer" value="true">
+  <br>
+  <input type="submit" id="stop_timer_submit_button" name="stop_timer_submit_button" value="Stop Timer">
+</form>
+{% endif %}
+<hr>
+<a href="/"><button>View / Create Leaderboard</button></a>
+{% endblock body %}
