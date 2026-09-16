@@ -1,7 +1,7 @@
 # Leaderboard-Server
 Simple leaderboard webserver.
 
-[![Tests](https://github.com/brkwrk/AImidterm/actions/workflows/ci.yml/badge.svg?branch=main)](https://github.com/brkwrk/AImidterm/actions/workflows/ci.yml)
+[![Tests](https://github.com/brkwrk/AIleaderboard/actions/workflows/ci.yml/badge.svg?branch=main)](https://github.com/brkwrk/AIleaderboard/actions/workflows/ci.yml)
 <!-- BADGIE TIME -->
 
 [![pre-commit](https://img.shields.io/badge/pre--commit-enabled-brightgreen?logo=pre-commit)](https://github.com/pre-commit/pre-commit)
@@ -19,7 +19,7 @@ This can be changed in the configuration file (more info below)
 
 ## Installation
 ```console
-pip install git+https://github.com/brkwrk/AImidterm.git
+pip install git+https://github.com/brkwrk/AIleaderboard.git
 ```
 
 ## Run
@@ -67,16 +67,16 @@ address of the machine running the webserver.
 When it asks `software`, tell them `other`.
 For my installation, I ended up [installing it with pip](https://pypi.org/project/certbot/).
 5) Install the [certbot duckdns plugin](https://github.com/infinityofspace/certbot_dns_duckdns) for certbot
-6) Either run certbot from duckdns plugin's README or run [/scripts/cert_create.sh](https://github.com/brkwrk/AImidterm/blob/main/scripts/cert_create.sh) with your details.
-7) Setup autorenewal from [certbot wiki](https://eff-certbot.readthedocs.io/en/latest/using.html#setting-up-automated-renewal) or look at [/scripts/cert_renew.sh](https://github.com/brkwrk/AImidterm/blob/main/scripts/cert_renew.sh)
+6) Either run certbot from duckdns plugin's README or run [/scripts/cert_create.sh](https://github.com/brkwrk/AIleaderboard/blob/main/scripts/cert_create.sh) with your details.
+7) Setup autorenewal from [certbot wiki](https://eff-certbot.readthedocs.io/en/latest/using.html#setting-up-automated-renewal) or look at [/scripts/cert_renew.sh](https://github.com/brkwrk/AIleaderboard/blob/main/scripts/cert_renew.sh)
 8) Uncomment SSL lines in the webserver configuration file (see section above) and edit as needed for your particular setup.
 
 
 ### Links
-* Source Code - https://github.com/brkwrk/AImidterm.git
-* Issues      - https://github.com/brkwrk/AImidterm/issues
+* Source Code - https://github.com/brkwrk/AIleaderboard.git
+* Issues      - https://github.com/brkwrk/AIleaderboard/issues
 
 
 ### License
 -----------
-Code and documentation are available according to the GNU General Public License v3.0 (see [LICENSE](https://github.com/brkwrk/AImidterm/blob/HEAD/LICENSE)).
+Code and documentation are available according to the GNU General Public License v3.0 (see [LICENSE](https://github.com/brkwrk/AIleaderboard/blob/HEAD/LICENSE)).
