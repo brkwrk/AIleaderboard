@@ -42,6 +42,7 @@ dependencies = [
     'tomli >= 2.0.1; python_version < "3.11"',
     "python-dotenv>=1.2.4",
     "httpx2>=2.13.1",
+    "platformdirs>=4.12.2",
 ]
 
 [tool.setuptools.dynamic]
