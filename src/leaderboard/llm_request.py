@@ -101,6 +101,6 @@ async def get_llm_response(
         assert isinstance(content, str)
         return content
 
-    exc = ValueError("could not find message content in response body")
-    exc.add_note(f"{response_body = }")
-    raise exc
+    new_exc = ValueError("could not find message content in response body")
+    new_exc.add_note(f"{response_body = }")
+    raise new_exc
