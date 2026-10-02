@@ -36,15 +36,19 @@ me know if nothing of what I just said makes any sense.
 
 from __future__ import annotations
 
-import json
 import os
 
-import requests
-from dotenv import find_dotenv, load_dotenv
+import httpx2 as httpx
+import orjson
+import trio
+from dotenv import load_dotenv
+
+load_dotenv()
 
 
-def get_llm_response(
+async def get_llm_response(
     prompt: str,
+    client: httpx.AsyncClient,
     model: str = "dots-studio/dots-3-note-preview:free",
 ) -> str:
     """Retrieve a response from an AI model.
@@ -64,7 +68,7 @@ def get_llm_response(
          found.
 
     """
-    key: str = os.getenv("OPENROUTER_KEY")
+    key = os.getenv("OPENROUTER_KEY")
 
     if not key:
         # if the API key can't be found, skip any attempt to get model
@@ -72,51 +76,63 @@ def get_llm_response(
         return "ERROR: API key cannot be found."
 
     # send HTTP request to OpenRouter with a given prompt and model
-    response: requests.Response = requests.post(
+    response = await client.post(
         url="https://openrouter.ai/api/v1/chat/completions",
         headers={
-            "Authorization": "Bearer " + key,
+            "Authorization": f"Bearer {key}",
             "Content-Type": "application/json",
         },
-        data=json.dumps(
-            {
-                "model": model,
-                "messages": [{"role": "user", "content": prompt}],
-            },
-        ),
+        data={
+            "model": model,
+            "messages": [{"role": "user", "content": prompt}],
+        },
         timeout=50,
     )
 
     # get response as a dictionary
-    text_reply: dict = response.json()
+    try:
+        text_reply = orjson.loads(await response.aread())
+    except orjson.JSONDecodeError as decode_exc:
+        # raise decode error from http error
+        try:
+            response.raise_for_status()
+        except httpx.HTTPStatusError as http_exc:
+            raise decode_exc from http_exc
+        # if no http error re-raise json decode error
+        raise
 
-    if response.status_code != 200:
-        # if the API returned an error, display the error
-        reply = "API ERROR {}: {}"
-        return reply.format(
-            response.status_code,
-            text_reply["error"]["message"],
-        )
+    try:
+        response.raise_for_status()
+    except httpx.HTTPStatusError as exc:
+        # if the API returned an error, add error message as a note
+        exc.add_note(text_reply["error"]["message"])
+        raise exc
 
     # parse the model's response for the actual reply
     content = text_reply.get("choices")[0].get("message").get("content")
     if content:
+        assert isinstance(content, str)
         return content
 
     # the final text response, set to an error message by default
     return "ERROR: Reply content could not be found."
 
 
+async def async_main() -> None:
+    """Asynchronous entry point."""
+    async with httpx.AsyncClient() as client:
+        # get input from console and display the response (or an error if
+        # something goes wrong)
+        prompt = await trio.to_thread.run_sync(input, "Enter prompt: ")
+        result = await get_llm_response(prompt, client)
+        print("<start LLM response text>")
+        print(result)
+        print("<stop LLM response text>")
+
+
 def main() -> None:
     """Run program."""
-    # load the API key from its super secret storage location that no
-    # one can find
-    load_dotenv(find_dotenv())
-
-    # get input from console and display the response (or an error if
-    # something goes wrong)
-    prompt = input("Enter prompt...\n")
-    print(get_llm_response(prompt))
+    trio.run(async_main)
 
 
 if __name__ == "__main__":

@@ -4,6 +4,7 @@ Simple leaderboard webserver.
 [![Tests](https://github.com/brkwrk/AIleaderboard/actions/workflows/ci.yml/badge.svg?branch=main)](https://github.com/brkwrk/AIleaderboard/actions/workflows/ci.yml)
 <!-- BADGIE TIME -->
 
+[![pre-commit.ci status](https://results.pre-commit.ci/badge/github/brkwrk/AIleaderboard/main.svg)](https://results.pre-commit.ci/latest/github/brkwrk/AIleaderboard/main)
 [![pre-commit](https://img.shields.io/badge/pre--commit-enabled-brightgreen?logo=pre-commit)](https://github.com/pre-commit/pre-commit)
 
 <!-- END BADGIE TIME -->
