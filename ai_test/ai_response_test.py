@@ -47,7 +47,7 @@ def main() -> None:
 	print(getResponse(prompt))
 
 
-def getResponse(prompt: str, m: str = "inclusionai/ling-3.0-flash-fin:free") -> str:
+def getResponse(prompt: str, m: str = "dots-studio/dots-3-note-preview:free") -> str:
 	"""Retrieve a response from an AI model.
 
 	This function takes in a prompt, sends it to an AI model using OpenRouter's
