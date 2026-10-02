@@ -34,10 +34,12 @@ from collections.abc import (
     Iterable,
 )
 from enum import IntEnum, auto
+from functools import partial
 from os import makedirs, path
-from typing import TYPE_CHECKING, Final, TypedDict, TypeVar
+from typing import TYPE_CHECKING, Any, Final, TypedDict, TypeVar
 from uuid import UUID, uuid4
 
+import httpx2 as httpx
 import platformdirs
 import trio
 from hypercorn.config import Config
@@ -53,6 +55,8 @@ from leaderboard.server_utils import (
     pretty_exception,
 )
 
+# from leaderboard.llm_request import get_llm_response
+
 if sys.version_info < (3, 11):
     import tomli as tomllib
     from exceptiongroup import BaseExceptionGroup
@@ -60,6 +64,8 @@ else:
     import tomllib
 
 if TYPE_CHECKING:
+    from collections.abc import Coroutine
+
     from typing_extensions import ParamSpec
     from werkzeug import Response as WerkzeugResponse
 
@@ -110,6 +116,7 @@ class AppData(TypedDict):
     """Global shared application data."""
 
     leaderboards: dict[UUID, Leaderboard]
+    client: httpx.AsyncClient
 
 
 app: Final = QuartTrio(  # pylint: disable=invalid-name
@@ -117,7 +124,7 @@ app: Final = QuartTrio(  # pylint: disable=invalid-name
     static_folder="static",
     template_folder="templates",
 )
-APP_DATA = AppData({"leaderboards": {}})
+APP_DATA = AppData({"leaderboards": {}, "client": httpx.AsyncClient()})
 
 
 @app.get("/")
@@ -321,6 +328,15 @@ async def leaderboard_post(
     return app.redirect(f"/leaderboard/{leaderboard_uuid}")
 
 
+async def async_run_server(
+    serve_partial: partial[Coroutine[Any, Any, None]],
+) -> None:
+    """Call server partial while managing httpx client."""
+    async with httpx.AsyncClient() as client:
+        APP_DATA["client"] = client
+        await serve_partial()
+
+
 def run_server(
     secure_bind_port: int | None = None,
     insecure_bind_port: int | None = None,
@@ -410,7 +426,7 @@ def run_server(
 
         print("(CTRL + C to quit)")
 
-        trio.run(serve, app, config_obj)
+        trio.run(async_run_server, partial(serve, app, config_obj))
     except BaseExceptionGroup as exc:
         caught = False
         for ex in exc.exceptions:
