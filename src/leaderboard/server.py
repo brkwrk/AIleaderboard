@@ -25,19 +25,14 @@ __license__ = "GNU General Public License Version 3"
 
 
 import argparse
-import dataclasses
-import math
 import sys
-import time
 from collections.abc import (
     AsyncIterator,
     Iterable,
 )
-from enum import IntEnum, auto
 from functools import partial
 from os import makedirs, path
 from typing import TYPE_CHECKING, Any, Final, TypedDict, TypeVar
-from uuid import UUID, uuid4
 
 import httpx2 as httpx
 import platformdirs
@@ -48,14 +43,13 @@ from quart import request
 from quart.templating import stream_template
 from quart_trio import QuartTrio
 
-from leaderboard.elapsed import combine_end, get_elapsed
+from leaderboard.elapsed import combine_end
+from leaderboard.llm_request import get_llm_response
 from leaderboard.server_utils import (
     find_ip,
     get_exception_page,
     pretty_exception,
 )
-
-# from leaderboard.llm_request import get_llm_response
 
 if sys.version_info < (3, 11):
     import tomli as tomllib
@@ -83,39 +77,9 @@ MAIN_CONFIG: Final = CONFIG_PATH / "config.toml"
 T = TypeVar("T")
 
 
-@dataclasses.dataclass
-class Team:
-    """Team in a Leaderboard."""
-
-    id_: int
-    title: str
-    complete: bool = False
-    end_time: float = 0
-
-
-class BoardStateEnum(IntEnum):
-    """Leaderboard State Enum."""
-
-    CREATED = 0
-    RUNNING = auto()
-    COMPLETED = auto()
-
-
-@dataclasses.dataclass
-class Leaderboard:
-    """Leaderboard."""
-
-    title: str
-    state: BoardStateEnum = BoardStateEnum.CREATED
-    teams: list[Team] = dataclasses.field(default_factory=list)
-    start_time: float = 0
-    next_team_id: int = 0
-
-
 class AppData(TypedDict):
     """Global shared application data."""
 
-    leaderboards: dict[UUID, Leaderboard]
     client: httpx.AsyncClient
 
 
@@ -124,16 +88,27 @@ app: Final = QuartTrio(  # pylint: disable=invalid-name
     static_folder="static",
     template_folder="templates",
 )
-APP_DATA = AppData({"leaderboards": {}, "client": httpx.AsyncClient()})
+APP_DATA = AppData({"client": httpx.AsyncClient()})
 
 
 @app.get("/")
 async def root_get() -> AsyncIterator[str]:
     """Handle main page GET request."""
     return await stream_template(
-        "root_get.html.jinja",
-        leaderboards=APP_DATA["leaderboards"],
+        "character_simulator.html.jinja",
     )
+
+
+def format_prompt(character_card: str, current_situation: str) -> str:
+    """Return prompt for LLM given user input."""
+    return f"""You are simulating how a character would act in a given situation as a writing assistance tool. Your response will be displayed as-is.
+<character description>
+{character_card}
+</character description>
+<situation>
+{current_situation}
+</situation>
+"""
 
 
 @app.post("/")
@@ -143,23 +118,16 @@ async def root_post() -> (
 ):
     """Handle page POST."""
     multi_dict = await request.form
-    data = multi_dict.to_dict()
+    form = multi_dict.to_dict()
 
-    title = data.get("title", "").strip()
-
-    max_title_length = 30
+    character_card = form.get("character_card", "").strip()
+    current_situation = form.get("current_situation", "").strip()
 
     errors = []
-    if not title:
-        errors.append("Missing <code>title</code> parameter.")
-    elif len(title) > max_title_length:
-        errors.append(
-            f"Max length of title is <code>{max_title_length}</code>.",
-        )
-    for leaderboard in APP_DATA["leaderboards"].values():
-        if leaderboard.title == title:
-            errors.append("Provided title already exists.")
-            break
+    if not character_card:
+        errors.append("Missing <code>character_card</code> parameter.")
+    if not current_situation:
+        errors.append("Missing <code>current_situation</code> parameter.")
     if errors:
         return await get_exception_page(
             400,  # bad request
@@ -168,164 +136,24 @@ async def root_post() -> (
             request.url,
         )
 
-    # create leaderboard
-    uuid = uuid4()
-    APP_DATA["leaderboards"][uuid] = Leaderboard(title)
+    assert character_card
+    assert current_situation
 
-    return app.redirect(f"/leaderboard/{uuid}")
+    prompt = format_prompt(character_card, current_situation)
+    client = APP_DATA["client"]
 
+    # TODO: Remember in-process requests with a uuid and send users to
+    # an auto-reloading page with their uuid as a ticket that sends them
+    # to the root post page once LLM is done responding.
 
-@app.get("/leaderboard/<uuid:leaderboard_uuid>")
-@pretty_exception
-async def leaderboard_get(
-    leaderboard_uuid: UUID,
-) -> AsyncIterator[str] | tuple[AsyncIterator[str], int]:
-    """Leaderboard page get handling."""
-    leaderboard = APP_DATA["leaderboards"].get(leaderboard_uuid)
-
-    if leaderboard is None:
-        return await get_exception_page(
-            404,
-            "Not Found",
-            "Requested leaderboard not found.",
-            request.url,
-        )
+    response = (await get_llm_response(prompt, client)).strip()
 
     return await stream_template(
-        "leaderboard_get.html.jinja",
-        leaderboard=leaderboard,
-        get_elapsed=get_elapsed,
+        "character_simulator.html.jinja",
+        character_card_autofill=character_card,
+        current_situation_autofill=current_situation,
+        response=response,
     )
-
-
-def parse_int_or_none(value: str) -> int | None:
-    """Return parsed integer or None."""
-    try:
-        return int(value)
-    except ValueError:
-        return None
-
-
-@app.post("/leaderboard/<uuid:leaderboard_uuid>")
-@pretty_exception
-async def leaderboard_post(
-    leaderboard_uuid: UUID,
-) -> tuple[AsyncIterator[str], int] | WerkzeugResponse:
-    """Leaderboard page post handling."""
-    leaderboard = APP_DATA["leaderboards"].get(leaderboard_uuid)
-
-    if leaderboard is None:
-        return await get_exception_page(
-            404,
-            "Not Found",
-            "Requested leaderboard not found.",
-            request.url,
-        )
-
-    multi_dict = await request.form
-    data = multi_dict.to_dict()
-
-    leaderboard_timer_start = "start_leaderboard_timer" in data
-    leaderboard_timer_stop = "stop_leaderboard_timer" in data
-    team_title = data.get("team_title", "").strip()
-    team_stop = parse_int_or_none(data.get("team_stop", ""))
-    team_complete_index: int | None = None
-
-    max_title_length = 30
-
-    errors = []
-    if leaderboard_timer_start:
-        if leaderboard.state != BoardStateEnum.CREATED:
-            errors.append(
-                "Cannot start leaderboard timer if leaderboard not in <code>created</code> state.",
-            )
-        elif not leaderboard.teams:
-            errors.append(
-                "Cannot start leaderboard timer if leaderboard has no teams.",
-            )
-    elif (
-        leaderboard_timer_stop and leaderboard.state != BoardStateEnum.RUNNING
-    ):
-        errors.append(
-            "Cannot stop leaderboard timer if leaderboard not in <code>running</code> state.",
-        )
-    elif team_title:
-        if leaderboard.state != BoardStateEnum.CREATED:
-            errors.append(
-                "Cannot create a team while leaderboard timer is running.",
-            )
-        elif len(team_title) > max_title_length:
-            errors.append(
-                f"Max length of team title is <code>{max_title_length}</code>.",
-            )
-            team_title = None
-        else:
-            for team in leaderboard.teams:
-                if team.title == team_title:
-                    errors.append("Team with given title already exists.")
-                    team_title = None
-                    break
-    elif team_stop is not None:
-        if leaderboard.state != BoardStateEnum.RUNNING:
-            errors.append(
-                "Cannot stop leaderboard timer if leaderboard not in <code>running</code> state.",
-            )
-        elif team_stop < 0 or team_stop > len(leaderboard.teams):
-            errors.append("Team id out of bounds.")
-        else:
-            for team_complete_index, team in enumerate(leaderboard.teams):
-                if team.id_ == team_stop:
-                    team_complete_index = team_complete_index
-                    break
-            else:
-                errors.append("Team with given id does not exist.")
-                team_complete_index = None
-
-    if errors:
-        return await get_exception_page(
-            400,  # bad request
-            "Bad Request",
-            "\n<br>\n".join(errors),
-            request.url,
-        )
-
-    if leaderboard_timer_start:
-        assert leaderboard.state == BoardStateEnum.CREATED
-        leaderboard.start_time = time.time()
-        leaderboard.state = BoardStateEnum.RUNNING
-
-    elif leaderboard_timer_stop:
-        assert leaderboard.state == BoardStateEnum.RUNNING
-        leaderboard.state = BoardStateEnum.COMPLETED
-
-    elif team_title:
-        assert leaderboard.state == BoardStateEnum.CREATED
-        leaderboard.teams.append(Team(leaderboard.next_team_id, team_title))
-        leaderboard.next_team_id += 1
-
-    elif team_complete_index is not None:
-        assert leaderboard.state == BoardStateEnum.RUNNING
-        team = leaderboard.teams[team_complete_index]
-
-        team.end_time = time.time()
-        team.complete = True
-
-        leaderboard.teams.sort(
-            key=lambda team: team.end_time if team.complete else math.inf,
-        )
-
-        if all(team.complete for team in leaderboard.teams):
-            leaderboard.state = BoardStateEnum.COMPLETED
-
-    else:
-        return await get_exception_page(
-            400,  # bad request
-            "Bad Request",
-            "POST request with no valid actions to perform.",
-            request.url,
-        )
-
-    return app.redirect(f"/leaderboard/{leaderboard_uuid}")
 
 
 async def async_run_server(

@@ -1,0 +1,27 @@
+{% extends "base.html.jinja" %}
+{% block title %}LLM Character Simulator{% if response %} Response{% endif %}{% endblock title %}
+{% block body %}
+<div class="box">
+  <b>Simulate a Character</b>
+  <form name="simulate_character" method="post">
+    <label for="character_card">Character Description</label>
+    <br>
+    <textarea name="character_card" id="character_card" rows="{% if character_card_autofill %}{{ [(character_card_autofill|wordwrap).count('\n') + 1,8]|max }}{% else %}8{% endif %}" cols="80" required="true">{% if character_card_autofill %}{{ character_card_autofill|wordwrap|escape }}{% endif %}</textarea>
+    <br>
+    <label for="current_situation">Current Situation</label>
+    <br>
+    <textarea name="current_situation" id="current_situation" rows="{% if current_situation_autofill %}{{ [(current_situation_autofill|wordwrap).count('\n') + 1,8]|max }}{% else %}8{% endif %}" cols="80" required="true">{% if current_situation_autofill %}{{ current_situation_autofill|wordwrap|escape }}{% endif %}</textarea>
+    <br>
+    <input type="submit" id="simulate_character_submit_button" name="simulate_character_submit_button" value="Simulate">
+  </form>
+</div>
+{% if response %}
+<div class="box">
+  <label for="response">LLM Response</label>
+  <br>
+  {% set response_ww = response|wordwrap %}
+  <br>
+  <textarea name="response" id="response" rows="{{ response_ww.count('\n') + 1 }}" cols="80" readonly="true">{{ response_ww|escape }}</textarea>
+</div>
+{% endif %}
+{% endblock body %}

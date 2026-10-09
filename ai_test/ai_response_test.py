@@ -82,16 +82,20 @@ async def get_llm_response(
             "Authorization": f"Bearer {key}",
             "Content-Type": "application/json",
         },
-        data={
-            "model": model,
-            "messages": [{"role": "user", "content": prompt}],
-        },
+        data=orjson.dumps(
+            {
+                "model": model,
+                "messages": [{"role": "user", "content": prompt}],
+            },
+        ),
         timeout=50,
     )
 
     # get response as a dictionary
     try:
-        text_reply = orjson.loads(await response.aread())
+        response_text = await response.aread()
+        print(f"{response_text = }")
+        text_reply = orjson.loads(response_text)
     except orjson.JSONDecodeError as decode_exc:
         # raise decode error from http error
         try:

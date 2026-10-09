@@ -69,10 +69,12 @@ async def get_llm_response(
             "Authorization": f"Bearer {key}",
             "Content-Type": "application/json",
         },
-        data={
-            "model": model,
-            "messages": [{"role": "user", "content": prompt}],
-        },
+        data=orjson.dumps(
+            {
+                "model": model,
+                "messages": [{"role": "user", "content": prompt}],
+            },
+        ),
         timeout=50,
     )
 
@@ -87,6 +89,8 @@ async def get_llm_response(
             raise decode_exc from http_exc
         # if no http error re-raise json decode error
         raise
+
+    print(f"[{__title__}] {response_body = }")
 
     try:
         response.raise_for_status()

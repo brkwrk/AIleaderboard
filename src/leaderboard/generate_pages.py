@@ -323,243 +323,146 @@ def generate_error_page() -> str:
     )
 
 
-def generate_leaderboard_list() -> str:
-    """Generate radio items for scan devices."""
-    htmlgen.create_link(
-        "/update_scanners",
-        htmlgen.wrap_tag(
-            "button",
-            "Update Devices",
-            block=False,
-        ),
-    )
-
-    title = htmlgen.jinja_expression("leaderboard.title|escape")
-    count = htmlgen.jinja_expression("leaderboard.teams|length")
-    link = htmlgen.create_link(
-        "/leaderboard/" + htmlgen.jinja_expression("uuid"),
-        htmlgen.wrap_tag(
-            "button",
-            f"{title} ({count} teams)",
-            block=False,
-        ),
-    )
-
-    return htmlgen.jinja_bullet_list(
-        ("uuid", "leaderboard"),
-        "leaderboards.items()",
-        link,
-        else_content=htmlgen.wrap_tag(
-            "p",
-            "There are no leaderboards currently. Create one below.",
-            block=False,
-        ),
-    )
-
-
-@save_template_as("root_get")
-def generate_root_get() -> str:
-    """Generate / (root) GET page."""
-    leaderboards_box = htmlgen.contain_in_box(
-        generate_leaderboard_list(),
-        "Current Leaderboards",
-    )
-
-    form_content = htmlgen.input_field(
-        "leaderboard_title",
-        "Title",
-        field_name="title",
-        attrs={
-            "size": 30,
-            "maxlength": 30,
-            "required": True,
+@save_template_as("character_simulator")
+def generate_character_simulator() -> str:
+    """Generate / (root) GET/POST page."""
+    character_card_autofill = htmlgen.jinja_if_block(
+        {
+            "character_card_autofill": htmlgen.jinja_expression(
+                "character_card_autofill|wordwrap|escape",
+            ),
         },
+        block=False,
     )
-
-    create_leaderboard_form = htmlgen.form(
-        "create_leaderboard",
-        form_content,
-        "Create",
-        "Create a New Leaderboard",
-    )
-
-    html = "\n".join(
-        (
-            leaderboards_box,
-            htmlgen.contain_in_box(create_leaderboard_form),
-        ),
-    )
-
-    return template("View / Create Leaderboard", html)
-
-
-@save_template_as("leaderboard_get")
-def generate_leaderboard_get() -> str:
-    """Generate /leaderboard GET page."""
-    title = htmlgen.jinja_expression("leaderboard.title | escape")
-
-    team_id = htmlgen.jinja_expression("team.id_")
-
-    stop_team_form = htmlgen.form(
-        f"team_{team_id}",
-        "\n".join(
-            (
-                htmlgen.input_field(
-                    "team_stop",
-                    None,
-                    field_type="hidden",
-                    attrs={"value": team_id},
-                ),
-                htmlgen.input_field(
-                    f"submit_{team_id}",
-                    None,
-                    field_type="submit",
-                    attrs={"value": "Stop"},
-                ),
+    character_card_min_rows = 8
+    character_card_autofill_rows = htmlgen.jinja_if_block(
+        {
+            "character_card_autofill": htmlgen.jinja_expression(
+                f"[(character_card_autofill|wordwrap).count('\\n') + 1,{character_card_min_rows}]|max",
             ),
-        ),
+            "": str(character_card_min_rows),
+        },
+        block=False,
     )
 
-    teams_table_body = htmlgen.jinja_table_row(
-        ("team",),
-        "leaderboard.teams",
-        "\n".join(
-            (
-                htmlgen.wrap_tag(
-                    "td",
-                    htmlgen.jinja_expression("loop.index"),
-                    block=False,
-                ),
-                htmlgen.wrap_tag(
-                    "td",
-                    htmlgen.jinja_expression("team.title|escape"),
-                    block=False,
-                ),
-                # htmlgen.wrap_tag("td", htmlgen.jinja_expression("team.complete"), block=False),
-                htmlgen.jinja_if_block(
-                    {
-                        f"leaderboard.state != {server.BoardStateEnum.CREATED}": htmlgen.wrap_tag(
-                            "td",
-                            htmlgen.jinja_if_block(
-                                {
-                                    "team.complete": htmlgen.jinja_expression(
-                                        "get_elapsed(team.end_time - leaderboard.start_time)",
-                                    ),
-                                    f"leaderboard.state == {server.BoardStateEnum.COMPLETED}": "Did not finish",
-                                    "": stop_team_form,
-                                },
-                            ),
-                        ),
-                    },
-                ),
-            ),
-        ),
-    )
-
-    teams_table = htmlgen.jinja_table(
-        "Current Teams",
-        header_iterate=f"(('Place', 'Team Name') if leaderboard.state == {server.BoardStateEnum.CREATED} else ('Place', 'Team Name', 'Time'))",
-        body=teams_table_body,
-    )
-
-    no_teams = "\n".join(
+    character_card_textarea = "\n<br>\n".join(
         (
             htmlgen.wrap_tag(
-                "div",
-                "Current Teams",
+                "label",
+                "Character Description",
                 block=False,
-                style="text-align:center",
+                for_="character_card",
             ),
             htmlgen.wrap_tag(
-                "p",
-                "There are no teams currently. Create one below.",
+                "textarea",
+                character_card_autofill,
                 block=False,
+                name="character_card",
+                id_="character_card",
+                rows=character_card_autofill_rows,
+                cols=80,
+                required=True,
             ),
         ),
     )
 
-    teams_display = htmlgen.jinja_if_block(
+    current_situation_autofill = htmlgen.jinja_if_block(
         {
-            "leaderboard.teams|length != 0": teams_table,
-            "": no_teams,
-        },
-    )
-
-    create_team_form_content = htmlgen.input_field(
-        "team_title",
-        "Title",
-        attrs={
-            "size": 30,
-            "maxlength": 30,
-            "required": True,
-        },
-    )
-
-    create_team_form = htmlgen.form(
-        "create_team",
-        create_team_form_content,
-        "Create",
-        "Create a New Team",
-    )
-
-    create_team_section = htmlgen.jinja_if_block(
-        {
-            f"leaderboard.state == {server.BoardStateEnum.CREATED}": htmlgen.contain_in_box(
-                create_team_form,
+            "current_situation_autofill": htmlgen.jinja_expression(
+                "current_situation_autofill|wordwrap|escape",
             ),
         },
+        block=False,
     )
-
-    start_timer_form_content = htmlgen.input_field(
-        "start_leaderboard_timer",
-        None,
-        field_type="hidden",
-        attrs={"value": "true"},
-    )
-
-    start_timer_form = htmlgen.form(
-        "start_timer",
-        start_timer_form_content,
-        "Start Timer",
-    )
-
-    stop_timer_form_content = htmlgen.input_field(
-        "stop_leaderboard_timer",
-        None,
-        field_type="hidden",
-        attrs={"value": "true"},
-    )
-
-    stop_timer_form = htmlgen.form(
-        "stop_timer",
-        stop_timer_form_content,
-        "Stop Timer",
-    )
-
-    timer_control_section = htmlgen.jinja_if_block(
+    current_situation_min_rows = character_card_min_rows
+    current_situation_autofill_rows = htmlgen.jinja_if_block(
         {
-            f"leaderboard.state == {server.BoardStateEnum.CREATED} and leaderboard.teams": start_timer_form,
-            f"leaderboard.state == {server.BoardStateEnum.RUNNING}": stop_timer_form,
+            "current_situation_autofill": htmlgen.jinja_expression(
+                f"[(current_situation_autofill|wordwrap).count('\\n') + 1,{current_situation_min_rows}]|max",
+            ),
+            "": str(current_situation_min_rows),
+        },
+        block=False,
+    )
+
+    current_situation_textarea = "\n<br>\n".join(
+        (
+            htmlgen.wrap_tag(
+                "label",
+                "Current Situation",
+                block=False,
+                for_="current_situation",
+            ),
+            htmlgen.wrap_tag(
+                "textarea",
+                current_situation_autofill,
+                block=False,
+                name="current_situation",
+                id_="current_situation",
+                rows=current_situation_autofill_rows,
+                cols=80,
+                required=True,
+            ),
+        ),
+    )
+
+    form_contents = "\n<br>\n".join(  # noqa: FLY002
+        (
+            character_card_textarea,
+            current_situation_textarea,
+        ),
+    )
+
+    simulate_character_form = htmlgen.form(
+        "simulate_character",
+        form_contents,
+        "Simulate",
+        "Simulate a Character",
+    )
+
+    response = "\n<br>\n".join(
+        (
+            htmlgen.wrap_tag(
+                "label",
+                "LLM Response",
+                block=False,
+                for_="response",
+            ),
+            htmlgen.jinja_assign("response_ww", "response|wordwrap"),
+            htmlgen.wrap_tag(
+                "textarea",
+                htmlgen.jinja_expression("response_ww|escape"),
+                block=False,
+                name="response",
+                id_="response",
+                rows=htmlgen.jinja_expression("response_ww.count('\\n') + 1"),
+                cols=80,
+                readonly=True,
+            ),
+        ),
+    )
+
+    response_section = htmlgen.jinja_if_block(
+        {
+            "response": htmlgen.contain_in_box(response),
         },
     )
 
     html = "\n".join(
         (
-            htmlgen.contain_in_box(teams_display),
-            create_team_section,
-            timer_control_section,
-            htmlgen.tag("hr"),
-            htmlgen.create_link(
-                "/",
-                htmlgen.wrap_tag(
-                    "button",
-                    "View / Create Leaderboard",
-                    block=False,
-                ),
-            ),
+            htmlgen.contain_in_box(simulate_character_form),
+            response_section,
         ),
     )
-    return template(title, html)
+
+    title_extra = htmlgen.jinja_if_block(
+        {
+            "response": " Response",
+        },
+        block=False,
+    )
+
+    return template(f"LLM Character Simulator{title_extra}", html)
 
 
 def matches_disk_files(new_files: dict[Path, str]) -> bool:

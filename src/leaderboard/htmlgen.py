@@ -399,6 +399,11 @@ def jinja_comment(value: str) -> str:
     return f"{{# {value} #}}"
 
 
+def jinja_assign(key: str, value: str) -> str:
+    """Jinja variable assignment block."""
+    return jinja_statement(f"set {key} = {value}")
+
+
 def jinja_if_block(conditions: dict[str, str], block: bool = True) -> str:
     """Generate jinja if / if else block from dictionary.
 
