@@ -43,6 +43,7 @@ dependencies = [
     "python-dotenv>=1.2.4",
     "httpx2>=2.13.1",
     "platformdirs>=4.12.2",
+    "orjson>=3.13.0",
 ]
 
 [tool.setuptools.dynamic]
