@@ -399,9 +399,31 @@ def jinja_comment(value: str) -> str:
     return f"{{# {value} #}}"
 
 
-def jinja_assign(key: str, value: str) -> str:
+def jinja_assign(key: str, value: object) -> str:
     """Jinja variable assignment block."""
     return jinja_statement(f"set {key} = {value}")
+
+
+def jinja_with_block(
+    content: str,
+    assignments: dict[str, object] | None = None,
+    block: bool = True,
+) -> str:
+    """Jinja with block with optional inline scoped variable assignments."""
+    with_open = "with"
+    if assignments:
+        assignment_text = ", ".join(
+            f"{k} = {v}" for k, v in assignments.items()
+        )
+        with_open = f"with {assignment_text}"
+    join = "\n" if block else ""
+    return join.join(
+        (
+            jinja_statement(with_open),
+            content,
+            jinja_statement("endwith"),
+        ),
+    )
 
 
 def jinja_if_block(conditions: dict[str, str], block: bool = True) -> str:
