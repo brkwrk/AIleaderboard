@@ -6,11 +6,15 @@
   <form name="simulate_character" method="post">
     <label for="character_card">Character Description</label>
     <br>
-    <textarea name="character_card" id="character_card" rows="{% if character_card_autofill %}{{ [(character_card_autofill|wordwrap).count('\n') + 1,8]|max }}{% else %}8{% endif %}" cols="80" required="true">{% if character_card_autofill %}{{ character_card_autofill|wordwrap|escape }}{% endif %}</textarea>
+    {% with body = character_card_autofill|default('')|wordwrap %}
+    <textarea name="character_card" id="character_card" rows="{{ (body.count('\n') + 1,8)|max }}" cols="80" required="true">{{ body|escape }}</textarea>
+    {% endwith %}
     <br>
     <label for="current_situation">Current Situation</label>
     <br>
-    <textarea name="current_situation" id="current_situation" rows="{% if current_situation_autofill %}{{ [(current_situation_autofill|wordwrap).count('\n') + 1,8]|max }}{% else %}8{% endif %}" cols="80" required="true">{% if current_situation_autofill %}{{ current_situation_autofill|wordwrap|escape }}{% endif %}</textarea>
+    {% with body = current_situation_autofill|default('')|wordwrap %}
+    <textarea name="current_situation" id="current_situation" rows="{{ (body.count('\n') + 1,8)|max }}" cols="80" required="true">{{ body|escape }}</textarea>
+    {% endwith %}
     <br>
     <input type="submit" id="simulate_character_submit_button" name="simulate_character_submit_button" value="Simulate">
   </form>
@@ -19,9 +23,9 @@
 <div class="box">
   <label for="response">LLM Response</label>
   <br>
-  {% set response_ww = response|wordwrap %}
-  <br>
-  <textarea name="response" id="response" rows="{{ response_ww.count('\n') + 1 }}" cols="80" readonly="true">{{ response_ww|escape }}</textarea>
+  {% with body = response|wordwrap %}
+  <textarea name="response" id="response" rows="{{ body.count('\n') + 1 }}" cols="80" readonly="true">{{ body|escape }}</textarea>
+  {% endwith %}
 </div>
 {% endif %}
 {% endblock body %}

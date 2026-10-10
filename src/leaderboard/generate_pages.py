@@ -326,24 +326,7 @@ def generate_error_page() -> str:
 @save_template_as("character_simulator")
 def generate_character_simulator() -> str:
     """Generate / (root) GET/POST page."""
-    character_card_autofill = htmlgen.jinja_if_block(
-        {
-            "character_card_autofill": htmlgen.jinja_expression(
-                "character_card_autofill|wordwrap|escape",
-            ),
-        },
-        block=False,
-    )
     character_card_min_rows = 8
-    character_card_autofill_rows = htmlgen.jinja_if_block(
-        {
-            "character_card_autofill": htmlgen.jinja_expression(
-                f"[(character_card_autofill|wordwrap).count('\\n') + 1,{character_card_min_rows}]|max",
-            ),
-            "": str(character_card_min_rows),
-        },
-        block=False,
-    )
 
     character_card_textarea = "\n<br>\n".join(
         (
@@ -353,37 +336,27 @@ def generate_character_simulator() -> str:
                 block=False,
                 for_="character_card",
             ),
-            htmlgen.wrap_tag(
-                "textarea",
-                character_card_autofill,
-                block=False,
-                name="character_card",
-                id_="character_card",
-                rows=character_card_autofill_rows,
-                cols=80,
-                required=True,
+            htmlgen.jinja_with_block(
+                htmlgen.wrap_tag(
+                    "textarea",
+                    htmlgen.jinja_expression("body|escape"),
+                    block=False,
+                    name="character_card",
+                    id_="character_card",
+                    rows=htmlgen.jinja_expression(
+                        f"(body.count('\\n') + 1,{character_card_min_rows})|max",
+                    ),
+                    cols=80,
+                    required=True,
+                ),
+                {
+                    "body": "character_card_autofill|default('')|wordwrap",
+                },
             ),
         ),
     )
 
-    current_situation_autofill = htmlgen.jinja_if_block(
-        {
-            "current_situation_autofill": htmlgen.jinja_expression(
-                "current_situation_autofill|wordwrap|escape",
-            ),
-        },
-        block=False,
-    )
     current_situation_min_rows = character_card_min_rows
-    current_situation_autofill_rows = htmlgen.jinja_if_block(
-        {
-            "current_situation_autofill": htmlgen.jinja_expression(
-                f"[(current_situation_autofill|wordwrap).count('\\n') + 1,{current_situation_min_rows}]|max",
-            ),
-            "": str(current_situation_min_rows),
-        },
-        block=False,
-    )
 
     current_situation_textarea = "\n<br>\n".join(
         (
@@ -393,15 +366,22 @@ def generate_character_simulator() -> str:
                 block=False,
                 for_="current_situation",
             ),
-            htmlgen.wrap_tag(
-                "textarea",
-                current_situation_autofill,
-                block=False,
-                name="current_situation",
-                id_="current_situation",
-                rows=current_situation_autofill_rows,
-                cols=80,
-                required=True,
+            htmlgen.jinja_with_block(
+                htmlgen.wrap_tag(
+                    "textarea",
+                    htmlgen.jinja_expression("body|escape"),
+                    block=False,
+                    name="current_situation",
+                    id_="current_situation",
+                    rows=htmlgen.jinja_expression(
+                        f"(body.count('\\n') + 1,{current_situation_min_rows})|max",
+                    ),
+                    cols=80,
+                    required=True,
+                ),
+                {
+                    "body": "current_situation_autofill|default('')|wordwrap",
+                },
             ),
         ),
     )
@@ -428,16 +408,20 @@ def generate_character_simulator() -> str:
                 block=False,
                 for_="response",
             ),
-            htmlgen.jinja_assign("response_ww", "response|wordwrap"),
-            htmlgen.wrap_tag(
-                "textarea",
-                htmlgen.jinja_expression("response_ww|escape"),
-                block=False,
-                name="response",
-                id_="response",
-                rows=htmlgen.jinja_expression("response_ww.count('\\n') + 1"),
-                cols=80,
-                readonly=True,
+            htmlgen.jinja_with_block(
+                htmlgen.wrap_tag(
+                    "textarea",
+                    htmlgen.jinja_expression("body|escape"),
+                    block=False,
+                    name="response",
+                    id_="response",
+                    rows=htmlgen.jinja_expression("body.count('\\n') + 1"),
+                    cols=80,
+                    readonly=True,
+                ),
+                {
+                    "body": "response|wordwrap",
+                },
             ),
         ),
     )
