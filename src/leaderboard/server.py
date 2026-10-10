@@ -31,12 +31,13 @@ from collections.abc import (
     Iterable,
 )
 from functools import partial
-from os import makedirs, path
+from os import getenv, makedirs, path
 from typing import TYPE_CHECKING, Any, Final, TypedDict, TypeVar
 
 import httpx2 as httpx
 import platformdirs
 import trio
+from dotenv import load_dotenv
 from hypercorn.config import Config
 from hypercorn.trio import serve
 from quart import request
@@ -44,7 +45,7 @@ from quart.templating import stream_template
 from quart_trio import QuartTrio
 
 from leaderboard.elapsed import combine_end
-from leaderboard.llm_request import get_llm_response
+from leaderboard.llm_request import yield_llm_stream
 from leaderboard.server_utils import (
     find_ip,
     get_exception_page,
@@ -81,6 +82,7 @@ class AppData(TypedDict):
     """Global shared application data."""
 
     client: httpx.AsyncClient
+    key: str
 
 
 app: Final = QuartTrio(  # pylint: disable=invalid-name
@@ -88,7 +90,7 @@ app: Final = QuartTrio(  # pylint: disable=invalid-name
     static_folder="static",
     template_folder="templates",
 )
-APP_DATA = AppData({"client": httpx.AsyncClient()})
+APP_DATA = AppData({"client": httpx.AsyncClient(), "key": "fake key"})
 
 
 @app.get("/")
@@ -122,6 +124,7 @@ async def root_post() -> (
 
     character_card = form.get("character_card", "").strip()
     current_situation = form.get("current_situation", "").strip()
+    js_disabled = bool(form.get("js_disabled", ""))
 
     errors = []
     if not character_card:
@@ -141,12 +144,21 @@ async def root_post() -> (
 
     prompt = format_prompt(character_card, current_situation)
     client = APP_DATA["client"]
+    key = APP_DATA["key"]
 
     # TODO: Remember in-process requests with a uuid and send users to
     # an auto-reloading page with their uuid as a ticket that sends them
     # to the root post page once LLM is done responding.
 
-    response = (await get_llm_response(prompt, client)).strip()
+    # response = (await get_llm_response(prompt, client, key)).strip()
+    fragments = []
+    fragments.append(f"{js_disabled = }\n\n")
+    async for fragment in yield_llm_stream(prompt, client, key):
+        fragments.append(fragment)
+        print(fragment, end="", flush=True)
+    print()
+
+    response = "".join(fragments)
 
     return await stream_template(
         "character_simulator.html.jinja",
@@ -346,6 +358,13 @@ def run() -> None:
     ip_address: str | None = None
     if args.local:
         ip_address = "127.0.0.1"
+
+    load_dotenv()
+
+    key = getenv("OPENROUTER_KEY")
+    if key is None:
+        raise KeyError("`OPENROUTER_KEY` not found in environment")
+    APP_DATA["key"] = key
 
     run_server(
         secure_bind_port=secure_bind_port,

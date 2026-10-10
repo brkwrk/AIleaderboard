@@ -386,10 +386,21 @@ def generate_character_simulator() -> str:
         ),
     )
 
+    no_javascript_element = htmlgen.wrap_tag(
+        "noscript",
+        htmlgen.input_field(
+            "js_disabled",
+            None,
+            field_type="hidden",
+            attrs={"value": 1},
+        ),
+    )
+
     form_contents = "\n<br>\n".join(  # noqa: FLY002
         (
             character_card_textarea,
             current_situation_textarea,
+            no_javascript_element,
         ),
     )
 

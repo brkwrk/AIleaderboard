@@ -24,18 +24,66 @@ __title__ = "LLM Request"
 __author__ = "CoolCat467"
 __license__ = "GNU General Public License Version 3"
 
-import os
+
+from typing import TYPE_CHECKING, Any
 
 import httpx2 as httpx
 import orjson
-from dotenv import load_dotenv
 
-load_dotenv()
+if TYPE_CHECKING:
+    from collections.abc import AsyncGenerator
+
+
+async def perform_llm_request(
+    prompt: str,
+    client: httpx.AsyncClient,
+    key: str,
+    model: str = "dots-studio/dots-3-note-preview:free",
+) -> dict[str, Any]:
+    """Return JSON decoded response body from LLM provider request."""
+    # send HTTP request to OpenRouter with a given prompt and model
+    async with await client.post(
+        url="https://openrouter.ai/api/v1/chat/completions",
+        headers={
+            "Authorization": f"Bearer {key}",
+            "Content-Type": "application/json",
+        },
+        data=orjson.dumps(
+            {
+                "model": model,
+                "messages": [{"role": "user", "content": prompt}],
+            },
+        ),
+        timeout=50,
+    ) as response:
+        # get response as a dictionary
+        try:
+            response_body = orjson.loads(await response.aread())
+        except orjson.JSONDecodeError as decode_exc:
+            # raise decode error from http error
+            try:
+                response.raise_for_status()
+            except httpx.HTTPStatusError as http_exc:
+                raise decode_exc from http_exc
+            # if no http error re-raise json decode error
+            raise
+
+        print(f"[{__title__}] {response_body = }")
+
+        try:
+            response.raise_for_status()
+        except httpx.HTTPStatusError as exc:
+            # if the API returned an error, add error message as a note
+            exc.add_note(response_body["error"]["message"])
+            raise exc
+
+        return response_body
 
 
 async def get_llm_response(
     prompt: str,
     client: httpx.AsyncClient,
+    key: str,
     model: str = "dots-studio/dots-3-note-preview:free",
 ) -> str:
     """Retrieve a response from an AI model.
@@ -55,49 +103,12 @@ async def get_llm_response(
          found.
 
     """
-    key = os.getenv("OPENROUTER_KEY")
-
-    if not key:
-        # if the API key can't be found, skip any attempt to get model
-        # response
-        raise KeyError("OPENROUTER_KEY not found in environment")
-
-    # send HTTP request to OpenRouter with a given prompt and model
-    response = await client.post(
-        url="https://openrouter.ai/api/v1/chat/completions",
-        headers={
-            "Authorization": f"Bearer {key}",
-            "Content-Type": "application/json",
-        },
-        data=orjson.dumps(
-            {
-                "model": model,
-                "messages": [{"role": "user", "content": prompt}],
-            },
-        ),
-        timeout=50,
+    response_body = await perform_llm_request(
+        prompt,
+        client,
+        key,
+        model,
     )
-
-    # get response as a dictionary
-    try:
-        response_body = orjson.loads(await response.aread())
-    except orjson.JSONDecodeError as decode_exc:
-        # raise decode error from http error
-        try:
-            response.raise_for_status()
-        except httpx.HTTPStatusError as http_exc:
-            raise decode_exc from http_exc
-        # if no http error re-raise json decode error
-        raise
-
-    print(f"[{__title__}] {response_body = }")
-
-    try:
-        response.raise_for_status()
-    except httpx.HTTPStatusError as exc:
-        # if the API returned an error, add error message as a note
-        exc.add_note(response_body["error"]["message"])
-        raise exc
 
     # parse the model's response for the actual reply
     content = response_body.get("choices")[0].get("message").get("content")
@@ -108,3 +119,67 @@ async def get_llm_response(
     new_exc = ValueError("could not find message content in response body")
     new_exc.add_note(f"{response_body = }")
     raise new_exc
+
+
+async def yield_llm_stream(
+    prompt: str,
+    client: httpx.AsyncClient,
+    key: str,
+    model: str = "dots-studio/dots-3-note-preview:free",
+) -> AsyncGenerator[str, None]:
+    """Yield a stream of text fragments from LLM provider request."""
+    headers = {
+        "Authorization": f"Bearer {key}",
+        "Content-Type": "application/json",
+    }
+    payload = {
+        "model": model,
+        "messages": [{"role": "user", "content": prompt}],
+        "stream": True,
+    }
+
+    async with client.stream(
+        "POST",
+        url="https://openrouter.ai/api/v1/chat/completions",
+        headers=headers,
+        data=orjson.dumps(payload),
+        timeout=50,
+    ) as response:
+        # check pre-stream errors
+        try:
+            response.raise_for_status()
+        except httpx.HTTPStatusError as http_exc:
+            try:
+                error_data = orjson.loads(await response.aread())
+            except orjson.JSONDecodeError as decode_exc:
+                # raise decode error from http error
+                raise decode_exc from http_exc
+            # if the API returned an error, add error message as a note
+            http_exc.add_note(error_data["error"]["message"])
+            raise http_exc from None
+
+        async for line in response.aiter_lines():
+            # Skip blank lines and SSE comments (for example, keep-alive
+            # messages).
+            if not line or line.startswith(":"):
+                continue
+
+            if not line.startswith("data: "):
+                continue
+
+            data = line[6:]
+            if data == "[DONE]":
+                break
+
+            try:
+                parsed = orjson.loads(data)
+            except orjson.JSONDecodeError:
+                continue
+
+            # Check for mid-stream error
+            if "error" in parsed:
+                raise OSError(parsed["error"]["message"])
+
+            content = parsed["choices"][0]["delta"].get("content")
+            if content:
+                yield content

@@ -16,6 +16,10 @@
     <textarea name="current_situation" id="current_situation" rows="{{ (body.count('\n') + 1,8)|max }}" cols="80" required="true">{{ body|escape }}</textarea>
     {% endwith %}
     <br>
+    <noscript>
+      <input type="hidden" id="js_disabled" name="js_disabled" value="1">
+    </noscript>
+    <br>
     <input type="submit" id="simulate_character_submit_button" name="simulate_character_submit_button" value="Simulate">
   </form>
 </div>
