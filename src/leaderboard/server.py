@@ -39,7 +39,6 @@ from typing import (
     Any,
     Final,
     Generic,
-    NamedTuple,
     TypedDict,
     TypeVar,
 )
@@ -119,7 +118,9 @@ class StreamConsumer(Generic[T]):
         # print("[yield_response] completing")
 
 
-class BackgroundStreamRequestPool(NamedTuple, Generic[T]):
+# TODO: Switch back to `NamedTuple` after we drop 3.10 support.
+@dataclass
+class BackgroundStreamRequestPool(Generic[T]):
     """Background streaming request pool."""
 
     requests: dict[UUID, StreamConsumer[T]]
