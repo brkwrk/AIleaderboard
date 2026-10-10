@@ -48,7 +48,7 @@ async def perform_llm_request(
             "Authorization": f"Bearer {key}",
             "Content-Type": "application/json",
         },
-        data=orjson.dumps(
+        content=orjson.dumps(
             {
                 "model": model,
                 "messages": [{"role": "user", "content": prompt}],
@@ -78,6 +78,7 @@ async def perform_llm_request(
         http_exc.add_note(response_body["error"]["message"])
         raise http_exc from None
 
+    assert isinstance(response_body, dict)
     return response_body
 
 
@@ -112,7 +113,9 @@ async def get_llm_response(
     )
 
     # parse the model's response for the actual reply
-    content = response_body.get("choices")[0].get("message").get("content")
+    content = (
+        response_body.get("choices", [{}])[0].get("message", {}).get("content")
+    )
     if content:
         assert isinstance(content, str)
         return content
@@ -143,7 +146,7 @@ async def yield_llm_stream(
         "POST",
         url="https://openrouter.ai/api/v1/chat/completions",
         headers=headers,
-        data=orjson.dumps(payload),
+        content=orjson.dumps(payload),
         timeout=50,
     ) as response:
         # check pre-stream errors
