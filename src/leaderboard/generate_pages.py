@@ -457,7 +457,15 @@ def generate_character_simulator() -> str:
         block=False,
     )
 
-    return template(f"LLM Character Simulator{title_extra}", html)
+    head = htmlgen.wrap_tag(
+        "script",
+        "",
+        block=False,
+        src="/stream_response.js",
+        # defer=True,
+    )
+
+    return template(f"LLM Character Simulator{title_extra}", html, head=head)
 
 
 def matches_disk_files(new_files: dict[Path, str]) -> bool:

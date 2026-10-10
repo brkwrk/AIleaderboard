@@ -381,7 +381,14 @@ def form(
     title = ""
     if form_title is not None:
         title = wrap_tag("b", form_title, block=False) + "\n"
-    return title + wrap_tag("form", html, True, name=form_id, method="post")
+    return title + wrap_tag(
+        "form",
+        html,
+        True,
+        id_=form_id,
+        name=form_id,
+        method="post",
+    )
 
 
 def jinja_statement(value: str) -> str:

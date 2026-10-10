@@ -18,7 +18,7 @@ along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
 from __future__ import annotations
 
-__title__ = "Leaderboard Webserver"
+__title__ = "Character Simulator Webserver"
 __author__ = "CoolCat467"
 __version__ = "0.1.0"
 __license__ = "GNU General Public License Version 3"
@@ -26,13 +26,24 @@ __license__ = "GNU General Public License Version 3"
 
 import argparse
 import sys
+import traceback
 from collections.abc import (
     AsyncIterator,
     Iterable,
 )
+from dataclasses import dataclass, field
 from functools import partial
 from os import getenv, makedirs, path
-from typing import TYPE_CHECKING, Any, Final, TypedDict, TypeVar
+from typing import (
+    TYPE_CHECKING,
+    Any,
+    Final,
+    Generic,
+    NamedTuple,
+    TypedDict,
+    TypeVar,
+)
+from uuid import UUID, uuid4
 
 import httpx2 as httpx
 import platformdirs
@@ -40,7 +51,7 @@ import trio
 from dotenv import load_dotenv
 from hypercorn.config import Config
 from hypercorn.trio import serve
-from quart import request
+from quart import Response, request
 from quart.templating import stream_template
 from quart_trio import QuartTrio
 
@@ -59,7 +70,8 @@ else:
     import tomllib
 
 if TYPE_CHECKING:
-    from collections.abc import Coroutine
+    from collections.abc import AsyncGenerator, Coroutine
+    from contextlib import AbstractAsyncContextManager
 
     from typing_extensions import ParamSpec
     from werkzeug import Response as WerkzeugResponse
@@ -78,11 +90,92 @@ MAIN_CONFIG: Final = CONFIG_PATH / "config.toml"
 T = TypeVar("T")
 
 
+@dataclass
+class StreamConsumer(Generic[T]):
+    """Stream consumer."""
+
+    recv_chan: trio.MemoryReceiveChannel[T | None]
+    lock: trio.Lock = field(default_factory=trio.Lock)
+
+    @property
+    def claimed(self) -> bool:
+        """Return if this stream is claimed."""
+        return self.lock.locked()
+
+    @trio.as_safe_channel
+    async def yield_response(self) -> AsyncGenerator[T, None]:
+        """Yield response values until None is returned."""
+        if self.lock.locked():
+            raise OSError("Another task has already claimed this request.")
+        # print("[yield_response] starting")
+        async with self.lock:
+            # print("[yield_response] got recv lock")
+            async with self.recv_chan:
+                while True:
+                    value = await self.recv_chan.receive()
+                    if value is None:
+                        break
+                    yield value
+        # print("[yield_response] completing")
+
+
+class BackgroundStreamRequestPool(NamedTuple, Generic[T]):
+    """Background streaming request pool."""
+
+    requests: dict[UUID, StreamConsumer[T]]
+    nursery: trio.Nursery | None
+
+    async def execute_request(
+        self,
+        ctx_manager: AbstractAsyncContextManager[trio.abc.ReceiveChannel[T]],
+        task_status: trio.TaskStatus[UUID] = trio.TASK_STATUS_IGNORED,
+    ) -> None:
+        """Start executing request stream and send it to the receive channel."""
+        send_chan, recv_chan = trio.open_memory_channel[T | None](0)
+
+        uuid = uuid4()
+        self.requests[uuid] = StreamConsumer(recv_chan)
+
+        task_status.started(uuid)
+
+        # print("[execute_request] starting")
+        try:
+            async with send_chan:
+                async with ctx_manager as gen_recv_chan:
+                    async for fragment in gen_recv_chan:
+                        await send_chan.send(fragment)
+                await send_chan.send(None)
+        except trio.BrokenResourceError:
+            # client closed before llm was done
+            pass
+        finally:
+            # print("[execute_request] completing")
+            del self.requests[uuid]
+
+    async def new_request(
+        self,
+        ctx_manager: AbstractAsyncContextManager[trio.abc.ReceiveChannel[T]],
+    ) -> UUID:
+        """Return new UUID associated with streaming this request."""
+        if self.nursery is None:
+            raise RuntimeError(
+                "nursery should have initialized with serve start",
+            )
+        result = await self.nursery.start(self.execute_request, ctx_manager)
+        assert isinstance(result, UUID)
+        return result
+
+    def obtain_request(self, uuid: UUID) -> StreamConsumer[T] | None:
+        """Return the associated stream consumer from a given UUID."""
+        return self.requests.get(uuid)
+
+
 class AppData(TypedDict):
     """Global shared application data."""
 
     client: httpx.AsyncClient
     key: str
+    request_pool: BackgroundStreamRequestPool[str]
 
 
 app: Final = QuartTrio(  # pylint: disable=invalid-name
@@ -90,7 +183,13 @@ app: Final = QuartTrio(  # pylint: disable=invalid-name
     static_folder="static",
     template_folder="templates",
 )
-APP_DATA = AppData({"client": httpx.AsyncClient(), "key": "fake key"})
+APP_DATA = AppData(
+    {
+        "client": httpx.AsyncClient(),
+        "key": "fake key",
+        "request_pool": BackgroundStreamRequestPool({}, None),
+    },
+)
 
 
 @app.get("/")
@@ -146,26 +245,63 @@ async def root_post() -> (
     client = APP_DATA["client"]
     key = APP_DATA["key"]
 
-    # TODO: Remember in-process requests with a uuid and send users to
-    # an auto-reloading page with their uuid as a ticket that sends them
-    # to the root post page once LLM is done responding.
+    request_pool = APP_DATA["request_pool"]
+    uuid = await request_pool.new_request(
+        yield_llm_stream(prompt, client, key),
+    )
 
-    # response = (await get_llm_response(prompt, client, key)).strip()
-    fragments = []
-    fragments.append(f"{js_disabled = }\n\n")
-    async for fragment in yield_llm_stream(prompt, client, key):
-        fragments.append(fragment)
-        print(fragment, end="", flush=True)
-    print()
+    if js_disabled:
+        # load directly since client can't
+        stream = request_pool.obtain_request(uuid)
+        if stream is None:
+            return await get_exception_page(
+                500,  # internal server error
+                "Internal Server Error",
+                "Somehow response stream is already claimed. Shouldn't be possible.",
+                request.url,
+            )
 
-    response = "".join(fragments)
+        async with stream.yield_response() as recv_chan:
+            fragments = []
+            async for fragment in recv_chan:
+                fragments.append(fragment)
 
+        return await stream_template(
+            "character_simulator.html.jinja",
+            character_card_autofill=character_card,
+            current_situation_autofill=current_situation,
+            response="".join(fragments),
+        )
+
+    # Javascript will take the uuid and load content from
+    # /character_response dynamically on page load.
     return await stream_template(
         "character_simulator.html.jinja",
         character_card_autofill=character_card,
         current_situation_autofill=current_situation,
-        response=response,
+        response=str(uuid),
     )
+
+
+@app.get("/character_response/<uuid:response_uuid>")
+@pretty_exception
+async def character_response_get(
+    response_uuid: UUID,
+) -> Response | tuple[str, int]:
+    """Character response page get handling."""
+    request_pool = APP_DATA["request_pool"]
+    stream = request_pool.obtain_request(response_uuid)
+    if stream is None:
+        # page expired
+        return "Requested page is expired or invalid.", 410
+
+    async def generate() -> AsyncGenerator[bytes, None]:
+        """Yield text fragments for javascript to load dynamically."""
+        async with stream.yield_response() as recv_chan:
+            async for fragment in recv_chan:
+                yield fragment.encode("utf-8")
+
+    return Response(generate(), content_type="text/plain; charset=utf-8")
 
 
 async def async_run_server(
@@ -174,7 +310,9 @@ async def async_run_server(
     """Call server partial while managing httpx client."""
     async with httpx.AsyncClient() as client:
         APP_DATA["client"] = client
-        await serve_partial()
+        async with trio.open_nursery() as nursery:
+            APP_DATA["request_pool"] = BackgroundStreamRequestPool({}, nursery)
+            nursery.start_soon(serve_partial)
 
 
 def run_server(
@@ -275,6 +413,7 @@ def run_server(
                 caught = True
                 break
         if not caught:
+            traceback.print_exception(exc)
             raise
 
 

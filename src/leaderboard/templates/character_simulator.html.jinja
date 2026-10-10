@@ -1,9 +1,12 @@
 {% extends "base.html.jinja" %}
 {% block title %}LLM Character Simulator{% if response %} Response{% endif %}{% endblock title %}
+{% block head %}
+<script src="/stream_response.js"></script>
+{% endblock head %}
 {% block body %}
 <div class="box">
   <b>Simulate a Character</b>
-  <form name="simulate_character" method="post">
+  <form id="simulate_character" name="simulate_character" method="post">
     <label for="character_card">Character Description</label>
     <br>
     {% with body = character_card_autofill|default('')|wordwrap %}

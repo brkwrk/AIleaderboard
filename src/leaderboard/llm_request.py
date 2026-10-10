@@ -29,6 +29,7 @@ from typing import TYPE_CHECKING, Any
 
 import httpx2 as httpx
 import orjson
+import trio
 
 if TYPE_CHECKING:
     from collections.abc import AsyncGenerator
@@ -125,6 +126,7 @@ async def get_llm_response(
     raise new_exc
 
 
+@trio.as_safe_channel
 async def yield_llm_stream(
     prompt: str,
     client: httpx.AsyncClient,
