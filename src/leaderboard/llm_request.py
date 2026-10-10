@@ -42,7 +42,7 @@ async def perform_llm_request(
 ) -> dict[str, Any]:
     """Return JSON decoded response body from LLM provider request."""
     # send HTTP request to OpenRouter with a given prompt and model
-    async with await client.post(
+    response = await client.post(
         url="https://openrouter.ai/api/v1/chat/completions",
         headers={
             "Authorization": f"Bearer {key}",
@@ -55,29 +55,30 @@ async def perform_llm_request(
             },
         ),
         timeout=50,
-    ) as response:
-        # get response as a dictionary
-        try:
-            response_body = orjson.loads(await response.aread())
-        except orjson.JSONDecodeError as decode_exc:
-            # raise decode error from http error
-            try:
-                response.raise_for_status()
-            except httpx.HTTPStatusError as http_exc:
-                raise decode_exc from http_exc
-            # if no http error re-raise json decode error
-            raise
+    )
 
-        print(f"[{__title__}] {response_body = }")
-
+    # get response as a dictionary
+    try:
+        response_body = orjson.loads(await response.aread())
+    except orjson.JSONDecodeError as decode_exc:
+        # raise decode error from http error
         try:
             response.raise_for_status()
-        except httpx.HTTPStatusError as exc:
-            # if the API returned an error, add error message as a note
-            exc.add_note(response_body["error"]["message"])
-            raise exc
+        except httpx.HTTPStatusError as http_exc:
+            raise decode_exc from http_exc
+        # if no http error re-raise json decode error
+        raise
 
-        return response_body
+    print(f"[{__title__}] {response_body = }")
+
+    try:
+        response.raise_for_status()
+    except httpx.HTTPStatusError as http_exc:
+        # if the API returned an error, add error message as a note
+        http_exc.add_note(response_body["error"]["message"])
+        raise http_exc from None
+
+    return response_body
 
 
 async def get_llm_response(
