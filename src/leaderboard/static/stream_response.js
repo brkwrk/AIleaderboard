@@ -44,9 +44,19 @@ async function load_content(output, uuid) {
 
 function dom_content_loaded() {
   const response = document.getElementById("response");
-  if (!response) return;
+  if (!response) {
+    console.log("could not find 'response' element.");
+    return;
+  }
   const uuid = response.textContent;
-  if (!uuid) return;
+  if (!uuid) {
+    console.log("uuid is empty.");
+    return;
+  }
+  if (uuid.length != 36) {
+    console.log(`uuid '${uuid.slice(0, 36)}' is invalid.`);
+    return;
+  }
   load_content(response, uuid);
 }
 
