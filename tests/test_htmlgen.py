@@ -374,7 +374,7 @@ def test_form() -> None:
             "click to add title",
         )
         == """<b>click to add title</b>
-<form name="form_id" method="post">
+<form id="form_id" name="form_id" method="post">
   dis content woo
   <br>
   <input type="submit" id="form_id_submit_button" name="form_id_submit_button" value="hihi">
@@ -385,7 +385,7 @@ def test_form() -> None:
 def test_form_no_title() -> None:
     assert (
         htmlgen.form("form_id", "dis content woo", "hihi")
-        == """<form name="form_id" method="post">
+        == """<form id="form_id" name="form_id" method="post">
   dis content woo
   <br>
   <input type="submit" id="form_id_submit_button" name="form_id_submit_button" value="hihi">
@@ -396,7 +396,7 @@ def test_form_no_title() -> None:
 def test_form_no_submit_display() -> None:
     assert (
         htmlgen.form("form_id", "dis content woo")
-        == """<form name="form_id" method="post">
+        == """<form id="form_id" name="form_id" method="post">
   dis content woo
 </form>"""
     )
